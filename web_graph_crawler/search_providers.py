@@ -405,21 +405,32 @@ class SerperProvider(SearchProvider):
             )
         self.api_key = api_key
 
+    # Serper's free tier caps `num` at 10 (num>10 => HTTP 400 "not allowed for
+    # free accounts"); pagination via `page` is allowed, so we page in 10s.
+    PAGE_SIZE = 10
+    MAX_PAGES = 20
+
     def search(self, query: str, max_results: int) -> list[str]:
         collected: list[str] = []
         seen: set[str] = set()
         headers = {"X-API-KEY": self.api_key}
+        per_page = min(self.PAGE_SIZE, max(1, max_results))
 
-        for page in range(1, 11):
+        for page in range(1, self.MAX_PAGES + 1):
             if len(collected) >= max_results:
                 break
-            body = {"q": query, "num": min(100, max_results), "page": page}
+            body = {"q": query, "num": per_page, "page": page}
             try:
                 payload = self.client.post_json(self.ENDPOINT, body, headers=headers)
             except HTTPError as exc:
                 if exc.code in {401, 403}:
                     raise SearchError("Serper API rejected the key") from exc
-                LOGGER.warning("Serper request failed for %r: %s", query, exc)
+                detail = ""
+                try:
+                    detail = exc.read().decode("utf-8", "replace")[:200]
+                except Exception:  # noqa: BLE001
+                    pass
+                LOGGER.warning("Serper request failed for %r: HTTP %s %s", query, exc.code, detail)
                 break
             except Exception as exc:  # noqa: BLE001
                 LOGGER.warning("Serper request failed for %r: %s", query, exc)

@@ -187,6 +187,12 @@ This is the reliable path for whole-TLD / `inurl:"?id=" filetype:php` style
 sweeps that keyless sources can't do. Google's own `--search-provider google`
 (CSE) is the official alternative (100 queries/day free).
 
+**Free-tier note:** Serper's free plan returns 10 results per request (`num` > 10
+is paid), so the provider paginates in 10s. Each page = 1 credit, so
+`--results-per-dork` sets the credit cost per dork: `10` = 1 credit/dork,
+`50` = 5. With ~2,500 free credits, `--results-per-dork 10` on 108 dorks is
+~108 credits (≈23 full runs); the default `50` is ~540/run.
+
 Examples:
 
 ```bash
