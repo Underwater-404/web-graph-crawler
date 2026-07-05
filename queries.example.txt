@@ -1,0 +1,2 @@
+# One search query per line. Blank lines and comments are ignored.
+site:example.org

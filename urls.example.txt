@@ -1,0 +1,3 @@
+# One URL per line. Blank lines and comments are ignored.
+https://example.org
+https://www.python.org

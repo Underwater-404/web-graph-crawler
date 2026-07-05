@@ -1,0 +1,9 @@
+# Normalise everything to LF in the repo (Linux-first project).
+* text=auto eol=lf
+
+# Force LF on scripts regardless of platform (CRLF breaks bash/shebangs).
+*.sh   text eol=lf
+*.py   text eol=lf
+*.toml text eol=lf
+*.md   text eol=lf
+*.txt  text eol=lf

@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "web-graph-crawler"
+version = "0.2.0"
+description = "Dork-driven, Playwright-rendered hyperlink graph crawler with an interactive terminal UI"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "web-graph-crawler contributors" }]
+keywords = ["osint", "crawler", "dorks", "playwright", "link-graph", "scraping"]
+classifiers = [
+    "Environment :: Console",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Topic :: Internet :: WWW/HTTP :: Indexing/Search",
+]
+dependencies = ["playwright>=1.45,<2"]
+
+[project.scripts]
+web-graph-crawler = "web_graph_crawler.cli:main"
+web-graph-styles = "web_graph_crawler.style_cli:main"
+
+[tool.setuptools]
+packages = ["web_graph_crawler"]
+
+[tool.setuptools.package-data]
+web_graph_crawler = ["py.typed"]
