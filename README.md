@@ -117,6 +117,7 @@ environment variables.
 | Common Crawl | `commoncrawl` | none                                 | Keyless, **never bans** (static dataset, not a live engine). Queries the open web index. Best for `site:domain` + `filetype:` dorks. |
 | Browser      | `browser`     | none                                 | Keyless. Drives the installed Chromium like a real user; defaults to **Bing** via `--browser-engine`. Most block-resistant keyless option and handles `filetype:`/`intitle:`. |
 | SearXNG      | `searxng`     | `--searxng-url` (or `SEARXNG_URL`)   | Best for large sweeps; point at your own instance. |
+| Serper       | `serper`      | `--serper-api-key` / `SERPER_API_KEY` | **Google's actual results** via a SERP API — the service scrapes Google, so your IP never gets banned/captcha'd. Free tier ~2,500 queries. Full operator support. |
 | Brave        | `brave`       | `--brave-api-key` / `BRAVE_SEARCH_API_KEY` | Free tier, real operator support. |
 | Google CSE   | `google`      | `--google-api-key` + `--google-cx`   | Google Programmable Search JSON API (100/day free). |
 | Bing         | `bing`        | `--bing-api-key`                     | Legacy. Microsoft retired the public API in Aug 2025; use only against a private/compatible endpoint. |
@@ -168,6 +169,23 @@ What it does well vs. not:
   (the URL index has no page text) — these are skipped with a warning.
 
 `--cc-index CC-MAIN-2024-33` pins a specific crawl (default: latest).
+
+### Google results without the bans (Serper)
+
+Scraping Google/Bing yourself always ends in captchas. A **SERP API** returns
+Google's real results while the service takes the scraping/ban risk — you just
+call a clean API. `serper` (https://serper.dev, free tier ~2,500 queries) gives
+full Google operator support (`site:`/`inurl:`/`filetype:`/`intitle:`), which is
+what heavy dork lists actually need:
+
+```bash
+export SERPER_API_KEY="your-key"
+web-graph-crawler --search-provider serper --dorks dorks.txt --out data/links.csv
+```
+
+This is the reliable path for whole-TLD / `inurl:"?id=" filetype:php` style
+sweeps that keyless sources can't do. Google's own `--search-provider google`
+(CSE) is the official alternative (100 queries/day free).
 
 Examples:
 

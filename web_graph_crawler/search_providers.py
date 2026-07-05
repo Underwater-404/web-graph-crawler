@@ -41,7 +41,9 @@ DEFAULT_USER_AGENT = (
     "Chrome/124.0.0.0 Safari/537.36"
 )
 
-PROVIDER_NAMES = ("duckduckgo", "searxng", "brave", "google", "bing", "browser", "commoncrawl")
+PROVIDER_NAMES = (
+    "duckduckgo", "searxng", "brave", "google", "bing", "browser", "commoncrawl", "serper",
+)
 
 
 class SearchError(RuntimeError):
@@ -100,6 +102,12 @@ class HttpClient:
         merged = {"Content-Type": "application/x-www-form-urlencoded", **(headers or {})}
         raw = self._request("POST", url, headers=merged, data=body)
         return raw.decode("utf-8", errors="replace")
+
+    def post_json(self, url: str, obj: Any, headers: dict[str, str] | None = None) -> Any:
+        body = json.dumps(obj).encode("utf-8")
+        merged = {"Content-Type": "application/json", "Accept": "application/json", **(headers or {})}
+        raw = self._request("POST", url, headers=merged, data=body)
+        return json.loads(raw.decode("utf-8", errors="replace"))
 
 
 class SearchProvider:
@@ -377,6 +385,63 @@ class BingProvider(SearchProvider):
         return collected
 
 
+class SerperProvider(SearchProvider):
+    """Google results via Serper.dev — a SERP API that scrapes Google for you.
+
+    You get Google's actual results (full operator support: site:/inurl:/
+    filetype:/intitle:) through a clean JSON API, so your IP never touches Google
+    and never gets captcha'd/banned. Free tier ~2,500 queries (https://serper.dev).
+    """
+
+    name = "serper"
+    ENDPOINT = "https://google.serper.dev/search"
+
+    def __init__(self, client: HttpClient, api_key: str) -> None:
+        super().__init__(client)
+        if not api_key:
+            raise SearchError(
+                "serper provider requires --serper-api-key or SERPER_API_KEY "
+                "(free key at https://serper.dev)"
+            )
+        self.api_key = api_key
+
+    def search(self, query: str, max_results: int) -> list[str]:
+        collected: list[str] = []
+        seen: set[str] = set()
+        headers = {"X-API-KEY": self.api_key}
+
+        for page in range(1, 11):
+            if len(collected) >= max_results:
+                break
+            body = {"q": query, "num": min(100, max_results), "page": page}
+            try:
+                payload = self.client.post_json(self.ENDPOINT, body, headers=headers)
+            except HTTPError as exc:
+                if exc.code in {401, 403}:
+                    raise SearchError("Serper API rejected the key") from exc
+                LOGGER.warning("Serper request failed for %r: %s", query, exc)
+                break
+            except Exception as exc:  # noqa: BLE001
+                LOGGER.warning("Serper request failed for %r: %s", query, exc)
+                break
+
+            organic = payload.get("organic", []) if isinstance(payload, dict) else []
+            fresh = 0
+            for item in organic:
+                link = item.get("link") if isinstance(item, dict) else None
+                if _is_http_url(link) and link not in seen:
+                    seen.add(link)
+                    collected.append(link)
+                    fresh += 1
+                    if len(collected) >= max_results:
+                        return collected
+
+            if not fresh:
+                break
+
+        return collected
+
+
 @dataclass(frozen=True)
 class ProviderSettings:
     """Everything needed to construct any provider."""
@@ -415,6 +480,8 @@ def create_search_provider(settings: ProviderSettings) -> SearchProvider:
         return GoogleCseProvider(client, settings.api_key or "", settings.google_cx or "")
     if name == "bing":
         return BingProvider(client, settings.api_key or "", settings.endpoint)
+    if name == "serper":
+        return SerperProvider(client, settings.api_key or "")
     if name == "browser":
         # Lazy import keeps Playwright optional for the HTTP-only providers.
         from .browser_search import BrowserSearchProvider

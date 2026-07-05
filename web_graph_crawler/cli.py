@@ -112,6 +112,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
     discovery.add_argument("--google-cx", help="Google Programmable Search engine id; or set GOOGLE_CX")
     discovery.add_argument("--bing-api-key", help="Legacy Bing key; or set BING_SEARCH_API_KEY")
     discovery.add_argument(
+        "--serper-api-key",
+        help="Serper.dev key (Google results via SERP API); or set SERPER_API_KEY",
+    )
+    discovery.add_argument(
         "--bing-endpoint",
         default="https://api.bing.microsoft.com/v7.0/search",
         help="Bing (or compatible) search endpoint",
@@ -289,6 +293,7 @@ def provider_settings_from_args(args: argparse.Namespace, proxy: str | None) -> 
         google_cx=args.google_cx,
         bing_key=args.bing_api_key,
         bing_endpoint=args.bing_endpoint,
+        serper_key=args.serper_api_key,
         searxng_url=args.searxng_url,
         browser_engine=args.browser_engine,
         cc_index=args.cc_index,

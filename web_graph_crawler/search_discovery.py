@@ -121,6 +121,7 @@ def build_provider_settings(
     google_cx: str | None = None,
     bing_key: str | None = None,
     bing_endpoint: str | None = None,
+    serper_key: str | None = None,
     searxng_url: str | None = None,
     browser_engine: str = "bing",
     cc_index: str | None = None,
@@ -138,6 +139,8 @@ def build_provider_settings(
         api_key = resolve_api_key(google_key, "GOOGLE_API_KEY", "GOOGLE_SEARCH_API_KEY")
     elif name == "bing":
         api_key = resolve_api_key(bing_key, "BING_SEARCH_API_KEY")
+    elif name == "serper":
+        api_key = resolve_api_key(serper_key, "SERPER_API_KEY")
 
     return ProviderSettings(
         name=name,
