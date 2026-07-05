@@ -1,31 +1,37 @@
 # One dork (search query) per line. Blank lines and lines starting with # are ignored.
 #
-# A "dork" is just a search query that uses operators to narrow results. These
-# are fed to the configured --search-provider, and every result URL becomes a
-# seed page for the crawl.
+# A "dork" is just a search query that uses operators to narrow results. Each
+# result URL becomes a seed page for the crawl.
 #
-# Operator support depends on the provider:
-#   duckduckgo : site:  inurl:  intitle:  filetype:  "exact phrase"  -exclude
-#   searxng    : depends on the engines the instance enables (usually all)
-#   brave      : site:  intitle:  inurl:  ext:  "exact phrase"  -exclude
-#   google     : full Google operator set (within the configured search engine)
+# Provider matters for operators:
+#   browser (Bing) : site: inurl: intitle: filetype: "exact phrase" -exclude   <- best keyless
+#   brave          : site: intitle: inurl: ext: "exact phrase" -exclude
+#   duckduckgo     : site: inurl: "exact phrase"  (weak at filetype:/intitle:, rate-limits fast)
 #
-# Examples (edit these for your own authorized targets):
+# Broad dorks below have NO site: filter, so they surface links from many
+# different domains. Run them with:  --search-provider browser
+#
+# Use these only against targets you are authorized to assess.
 
-# All indexed pages on one host
-site:python.org
+# --- Open directory listings (mixed domains) ---
+intitle:index.of "parent directory"
+intitle:index.of filetype:pdf
+intitle:index.of mp3
 
-# Narrow a site to a path/keyword
+# --- Documents across the web ---
+filetype:pdf "annual report"
+filetype:xlsx "email"
+filetype:log
+
+# --- Common app / CMS fingerprints ---
+inurl:wp-content
+inurl:phpinfo.php
+inurl:admin login
+
+# --- Exact-phrase discovery ---
+"powered by" forum
+"index of /backup"
+
+# --- Site-scoped examples (work on any provider) ---
 site:python.org inurl:downloads
-
-# A specific document type on a domain
 site:europa.eu filetype:pdf
-
-# Title match
-intitle:"release notes" site:djangoproject.com
-
-# Exact phrase plus an exclusion
-"getting started" site:fastapi.tiangolo.com -inurl:blog
-
-# Combine hosts with OR
-site:docs.python.org OR site:peps.python.org

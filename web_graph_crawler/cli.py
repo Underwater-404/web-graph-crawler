@@ -80,6 +80,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Proxy for search requests only; defaults to --proxy when omitted",
     )
     discovery.add_argument("--searxng-url", help="Base URL of a SearXNG instance (searxng provider)")
+    discovery.add_argument(
+        "--browser-engine",
+        choices=("bing", "duckduckgo"),
+        default="bing",
+        help="Which engine the keyless 'browser' provider drives (default: bing)",
+    )
     discovery.add_argument("--brave-api-key", help="Brave Search API key; or set BRAVE_SEARCH_API_KEY")
     discovery.add_argument("--google-api-key", help="Google API key; or set GOOGLE_API_KEY")
     discovery.add_argument("--google-cx", help="Google Programmable Search engine id; or set GOOGLE_CX")
@@ -263,6 +269,7 @@ def provider_settings_from_args(args: argparse.Namespace, proxy: str | None) -> 
         bing_key=args.bing_api_key,
         bing_endpoint=args.bing_endpoint,
         searxng_url=args.searxng_url,
+        browser_engine=args.browser_engine,
         proxy=proxy,
         user_agent=args.user_agent,
         timeout=args.search_timeout,

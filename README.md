@@ -113,11 +113,32 @@ environment variables.
 
 | Provider     | Flag value    | Auth needed                          | Notes |
 |--------------|---------------|--------------------------------------|-------|
-| DuckDuckGo   | `duckduckgo`  | none                                 | Default. Great for light use; rate-limits heavy automation. |
+| DuckDuckGo   | `duckduckgo`  | none                                 | Default. Keyless HTTP endpoint; great for light use but **rate-limits/blocks aggressively** (per-IP) under automation. |
+| Browser      | `browser`     | none                                 | Keyless. Drives the installed Chromium like a real user; defaults to **Bing** via `--browser-engine`. Most block-resistant keyless option and handles `filetype:`/`intitle:`. |
 | SearXNG      | `searxng`     | `--searxng-url` (or `SEARXNG_URL`)   | Best for large sweeps; point at your own instance. |
 | Brave        | `brave`       | `--brave-api-key` / `BRAVE_SEARCH_API_KEY` | Free tier, real operator support. |
 | Google CSE   | `google`      | `--google-api-key` + `--google-cx`   | Google Programmable Search JSON API (100/day free). |
 | Bing         | `bing`        | `--bing-api-key`                     | Legacy. Microsoft retired the public API in Aug 2025; use only against a private/compatible endpoint. |
+
+### Keyless browser search (recommended for real dorking)
+
+The `duckduckgo` provider hits a lightweight HTTP endpoint that throttles fast —
+on a shared/NAT IP you can get zero results (that is rate-limiting, not "no
+matches"). The `browser` provider instead drives the Chromium you already
+installed, so it looks like a human session, survives those blocks, and can pull
+from **Bing** (a different service, unaffected by DuckDuckGo throttling):
+
+```bash
+# Broad, un-targeted dorking via Bing (no site: needed, no API key)
+web-graph-crawler --search-provider browser --dork "intitle:index.of filetype:pdf"
+web-graph-crawler --search-provider browser --dorks mydorks.txt --out data/links.csv
+
+# Or drive DuckDuckGo's normal site in the browser instead of Bing
+web-graph-crawler --search-provider browser --browser-engine duckduckgo --dork "inurl:blog"
+```
+
+It runs the search headless regardless of `--headful`. Discovery happens before
+the crawl, so this adds ~1–2 s per dork to launch the browser.
 
 Examples:
 

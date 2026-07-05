@@ -41,7 +41,7 @@ DEFAULT_USER_AGENT = (
     "Chrome/124.0.0.0 Safari/537.36"
 )
 
-PROVIDER_NAMES = ("duckduckgo", "searxng", "brave", "google", "bing")
+PROVIDER_NAMES = ("duckduckgo", "searxng", "brave", "google", "bing", "browser")
 
 
 class SearchError(RuntimeError):
@@ -386,6 +386,7 @@ class ProviderSettings:
     endpoint: str | None = None
     searxng_url: str | None = None
     google_cx: str | None = None
+    browser_engine: str = "bing"
     proxy: str | None = None
     user_agent: str = DEFAULT_USER_AGENT
     timeout: float = 20.0
@@ -412,6 +413,17 @@ def create_search_provider(settings: ProviderSettings) -> SearchProvider:
         return GoogleCseProvider(client, settings.api_key or "", settings.google_cx or "")
     if name == "bing":
         return BingProvider(client, settings.api_key or "", settings.endpoint)
+    if name == "browser":
+        # Lazy import keeps Playwright optional for the HTTP-only providers.
+        from .browser_search import BrowserSearchProvider
+
+        return BrowserSearchProvider(
+            engine=settings.browser_engine,
+            headless=True,
+            proxy=settings.proxy,
+            user_agent=None,  # use a real desktop UA, not the stdlib client UA
+            timeout=max(30.0, settings.timeout),
+        )
     raise SearchError(f"Unsupported provider: {name}")  # pragma: no cover
 
 
