@@ -160,6 +160,33 @@ Discovery controls: `--results-per-dork` (default 20), `--search-delay-min` /
 `--search-delay-max` (pacing between queries), `--search-proxy` (route search
 requests through a proxy independent of page visits).
 
+## How many links, dedup, and filtering
+
+- **How many** per dork: `--results-per-dork` (default **50**). Engines cap the
+  real maximum per query (Bing ~50–100), so for a bigger sweep use **more
+  dorks** rather than only raising this. Total across all dorks is uncapped at
+  depth 0 unless you set `--max-pages`.
+- **De-duplication** is automatic: discovered links are collapsed by a key that
+  ignores `http`/`https`, a leading `www.`, and trailing slashes (so the same
+  page isn't crawled twice). A different query string still counts as a
+  different page.
+- **Famous sites are dropped by default** — Google, YouTube, Facebook,
+  Instagram, X/Twitter, LinkedIn, Reddit, Wikipedia, Amazon, Apple, Microsoft,
+  and other mainstream platforms (see `filters.py`). Dork sweeps usually want the
+  long tail, not these.
+  - `--include-famous` — keep them.
+  - `--exclude-domains a.com,b.org` — drop extra domains of your own (matches
+    subdomains too).
+- `--max-pages-per-domain N` also caps how many results a single domain can
+  contribute, so one big site can't dominate the seed set.
+
+```bash
+# 80 results/dork, drop mainstream sites + two of your own, one page per domain
+web-graph-crawler --search-provider browser --dorks dorks.example.txt \
+  --results-per-dork 80 --exclude-domains stackoverflow.com,github.io \
+  --max-pages-per-domain 1 --out data/links.csv
+```
+
 ## Crawling URLs directly
 
 Search discovery is optional. You can still pass URLs or a URL file:

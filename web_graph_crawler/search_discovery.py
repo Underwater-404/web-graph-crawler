@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlparse
 
+from .filters import dedup_key, is_excluded
 from .links import normalized_host
 from .progress import NULL_REPORTER, Reporter
 from .search_providers import (
@@ -159,6 +160,8 @@ class DiscoveryConfig:
     delay_min: float = 2.0
     delay_max: float = 6.0
     dump_path: Path | None = None
+    exclude_famous: bool = True
+    exclude_domains: frozenset[str] = frozenset()
     _rng: random.Random = field(default_factory=random.Random, repr=False)
 
 
@@ -185,9 +188,10 @@ def discover_urls(config: DiscoveryConfig, reporter: Reporter = NULL_REPORTER) -
 
         new_for_dork = 0
         for url in results:
-            if url in seen:
+            key = dedup_key(url)
+            if key in seen:
                 continue
-            seen.add(url)
+            seen.add(key)
             discovered.append(url)
             new_for_dork += 1
         LOGGER.info("Dork produced %d new URL(s) (%d total so far)", new_for_dork, len(discovered))
@@ -198,8 +202,14 @@ def discover_urls(config: DiscoveryConfig, reporter: Reporter = NULL_REPORTER) -
             LOGGER.info("Search pacing: waiting %.2fs before next dork", delay)
             time.sleep(delay)
 
-    selected = select_urls(discovered, config.max_results, config.max_per_domain)
-    LOGGER.info("Discovered %d URL(s); selected %d after caps", len(discovered), len(selected))
+    selected = select_urls(
+        discovered,
+        config.max_results,
+        config.max_per_domain,
+        exclude_famous=config.exclude_famous,
+        exclude_domains=config.exclude_domains,
+    )
+    LOGGER.info("Discovered %d URL(s); selected %d after caps/filters", len(discovered), len(selected))
     reporter.discovery_done(len(selected), len(discovered))
 
     if config.dump_path is not None:
@@ -208,11 +218,19 @@ def discover_urls(config: DiscoveryConfig, reporter: Reporter = NULL_REPORTER) -
     return selected
 
 
-def select_urls(urls: list[str], max_results: int, max_per_domain: int) -> list[str]:
-    """De-duplicate, enforce a per-domain cap, and clamp to ``max_results``.
+def select_urls(
+    urls: list[str],
+    max_results: int,
+    max_per_domain: int,
+    *,
+    exclude_famous: bool = True,
+    exclude_domains: frozenset[str] = frozenset(),
+) -> list[str]:
+    """De-duplicate, drop excluded/famous hosts, cap per-domain, clamp to max.
 
-    ``0`` disables a cap. Order is preserved so the first (usually most relevant)
-    results survive.
+    De-duplication is by canonical URL (so ``http`` vs ``https`` and trailing
+    slashes collapse). ``0`` disables a cap. Order is preserved so the first
+    (usually most relevant) results survive.
     """
 
     selected: list[str] = []
@@ -220,16 +238,19 @@ def select_urls(urls: list[str], max_results: int, max_per_domain: int) -> list[
     per_domain: dict[str, int] = defaultdict(int)
 
     for url in urls:
-        if url in seen:
+        key = dedup_key(url)
+        if key in seen:
             continue
         host = normalized_host(urlparse(url).hostname or "")
         if not host:
+            continue
+        if is_excluded(host, exclude_domains, exclude_famous):
             continue
         if max_per_domain and per_domain[host] >= max_per_domain:
             continue
 
         selected.append(url)
-        seen.add(url)
+        seen.add(key)
         per_domain[host] += 1
 
         if max_results and len(selected) >= max_results:

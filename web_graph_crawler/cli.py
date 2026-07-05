@@ -13,6 +13,7 @@ from urllib.parse import urlparse
 from .browser import RenderedLinkCrawler
 from .config import CrawlerConfig, load_urls, parse_viewport
 from .constants import DEFAULT_LOG_FILE, DEFAULT_OUTPUT, DEFAULT_STORAGE_STATE
+from .filters import parse_domain_list
 from .links import LinkRecord, canonical_url, normalized_host
 from .output import CsvSink
 from .politeness import DomainRateLimiter, RobotsCache
@@ -59,8 +60,18 @@ def build_arg_parser() -> argparse.ArgumentParser:
     discovery.add_argument(
         "--results-per-dork",
         type=int,
-        default=20,
-        help="Result URLs to request per dork",
+        default=50,
+        help="Result URLs to request per dork (engines cap the real max per query)",
+    )
+    discovery.add_argument(
+        "--include-famous",
+        action="store_true",
+        help="Keep mainstream sites (Google/YouTube/Facebook/Wikipedia/...); they are dropped by default",
+    )
+    discovery.add_argument(
+        "--exclude-domains",
+        metavar="d1,d2,...",
+        help="Extra domains to drop from discovery results (comma/space separated)",
     )
     discovery.add_argument(
         "--search-delay-min",
@@ -299,6 +310,8 @@ def gather_seed_urls(args: argparse.Namespace, reporter: Reporter = NULL_REPORTE
                 delay_min=args.search_delay_min,
                 delay_max=args.search_delay_max,
                 dump_path=args.discovered_urls_out,
+                exclude_famous=not args.include_famous,
+                exclude_domains=parse_domain_list(args.exclude_domains),
             ),
             reporter=reporter,
         )
