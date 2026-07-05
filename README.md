@@ -114,6 +114,7 @@ environment variables.
 | Provider     | Flag value    | Auth needed                          | Notes |
 |--------------|---------------|--------------------------------------|-------|
 | DuckDuckGo   | `duckduckgo`  | none                                 | Default. Keyless HTTP endpoint; great for light use but **rate-limits/blocks aggressively** (per-IP) under automation. |
+| Common Crawl | `commoncrawl` | none                                 | Keyless, **never bans** (static dataset, not a live engine). Queries the open web index. Best for `site:domain` + `filetype:` dorks. |
 | Browser      | `browser`     | none                                 | Keyless. Drives the installed Chromium like a real user; defaults to **Bing** via `--browser-engine`. Most block-resistant keyless option and handles `filetype:`/`intitle:`. |
 | SearXNG      | `searxng`     | `--searxng-url` (or `SEARXNG_URL`)   | Best for large sweeps; point at your own instance. |
 | Brave        | `brave`       | `--brave-api-key` / `BRAVE_SEARCH_API_KEY` | Free tier, real operator support. |
@@ -139,6 +140,34 @@ web-graph-crawler --search-provider browser --browser-engine duckduckgo --dork "
 
 It runs the search headless regardless of `--headful`. Discovery happens before
 the crawl, so this adds ~1–2 s per dork to launch the browser.
+
+### Common Crawl (keyless, never bans)
+
+Live engines throttle/captcha automated searching. Common Crawl is a **static
+open index of the web** — you query it over plain HTTP, so it can't ban you and
+needs no key. The provider maps your dork onto a CDX query:
+
+```bash
+web-graph-crawler --search-provider commoncrawl --dork "site:example.com filetype:pdf"
+web-graph-crawler --search-provider commoncrawl --dork "site:target.org inurl:admin" --out data/links.csv
+web-graph-crawler --search-provider commoncrawl --dorks dorks.txt --cc-max-records 20000
+```
+
+What it does well vs. not:
+
+- **Great:** `site:domain filetype:<pdf|doc|xls|ppt|csv|xml|json|zip|img…>` — the
+  filetype becomes a server-side MIME filter (fast, complete).
+- **Good:** `site:domain inurl:substring` — matched client-side over a
+  `collapse=urlkey` slice; raise `--cc-max-records` (default 10000) for deeper
+  coverage of large sites.
+- **Weak:** whole-TLD dorks (`site:.de …`) and script-extension + query-param
+  hunting (`filetype:php inurl:"?id="`). The index is host-anchored and only
+  filters server-side on metadata, so a TLD query only returns the alphabetical
+  slice. For that style, use the Brave API (real operator support) instead.
+- **Unsupported:** dorks with no `site:` anchor, and `intitle:`/`intext:`
+  (the URL index has no page text) — these are skipped with a warning.
+
+`--cc-index CC-MAIN-2024-33` pins a specific crawl (default: latest).
 
 Examples:
 

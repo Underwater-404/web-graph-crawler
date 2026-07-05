@@ -97,6 +97,16 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default="bing",
         help="Which engine the keyless 'browser' provider drives (default: bing)",
     )
+    discovery.add_argument(
+        "--cc-index",
+        help="Common Crawl index id to query (default: latest, e.g. CC-MAIN-2024-33)",
+    )
+    discovery.add_argument(
+        "--cc-max-records",
+        type=int,
+        default=10000,
+        help="Max CDX records to scan per dork for the commoncrawl provider",
+    )
     discovery.add_argument("--brave-api-key", help="Brave Search API key; or set BRAVE_SEARCH_API_KEY")
     discovery.add_argument("--google-api-key", help="Google API key; or set GOOGLE_API_KEY")
     discovery.add_argument("--google-cx", help="Google Programmable Search engine id; or set GOOGLE_CX")
@@ -281,6 +291,8 @@ def provider_settings_from_args(args: argparse.Namespace, proxy: str | None) -> 
         bing_endpoint=args.bing_endpoint,
         searxng_url=args.searxng_url,
         browser_engine=args.browser_engine,
+        cc_index=args.cc_index,
+        cc_max_records=args.cc_max_records,
         proxy=proxy,
         user_agent=args.user_agent,
         timeout=args.search_timeout,

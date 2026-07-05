@@ -41,7 +41,7 @@ DEFAULT_USER_AGENT = (
     "Chrome/124.0.0.0 Safari/537.36"
 )
 
-PROVIDER_NAMES = ("duckduckgo", "searxng", "brave", "google", "bing", "browser")
+PROVIDER_NAMES = ("duckduckgo", "searxng", "brave", "google", "bing", "browser", "commoncrawl")
 
 
 class SearchError(RuntimeError):
@@ -387,6 +387,8 @@ class ProviderSettings:
     searxng_url: str | None = None
     google_cx: str | None = None
     browser_engine: str = "bing"
+    cc_index: str | None = None
+    cc_max_records: int = 10000
     proxy: str | None = None
     user_agent: str = DEFAULT_USER_AGENT
     timeout: float = 20.0
@@ -423,6 +425,12 @@ def create_search_provider(settings: ProviderSettings) -> SearchProvider:
             proxy=settings.proxy,
             user_agent=None,  # use a real desktop UA, not the stdlib client UA
             timeout=max(30.0, settings.timeout),
+        )
+    if name == "commoncrawl":
+        from .commoncrawl import CommonCrawlProvider
+
+        return CommonCrawlProvider(
+            client, index_id=settings.cc_index, max_index_records=settings.cc_max_records
         )
     raise SearchError(f"Unsupported provider: {name}")  # pragma: no cover
 
