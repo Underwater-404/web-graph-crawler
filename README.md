@@ -187,6 +187,18 @@ This is the reliable path for whole-TLD / `inurl:"?id=" filetype:php` style
 sweeps that keyless sources can't do. Google's own `--search-provider google`
 (CSE) is the official alternative (100 queries/day free).
 
+### Your own unlimited endpoint (SearXNG on a VPS)
+
+For a **keyless, unlimited** search endpoint on a separate IP, run SearXNG (with
+Tor) on a VPS and reach it over an SSH tunnel — nothing is exposed publicly and
+no VPS details touch this repo. See [deploy/searxng/](deploy/searxng/README.md).
+Then just:
+
+```bash
+export SEARXNG_URL=http://127.0.0.1:8080   # the tunnel's local end
+web-graph-crawler --search-provider searxng --dorks dorks.txt --out data/links.csv
+```
+
 **Free-tier note:** Serper's free plan returns 10 results per request (`num` > 10
 is paid), so the provider paginates in 10s. Each page = 1 credit, so
 `--results-per-dork` sets the credit cost per dork: `10` = 1 credit/dork,

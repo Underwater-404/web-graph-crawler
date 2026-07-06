@@ -1,0 +1,27 @@
+# Private SearXNG + Tor for web-graph-crawler.
+#
+# SearXNG is bound to 127.0.0.1 on the VPS (NOT exposed publicly). Reach it from
+# your workstation over an SSH tunnel (see README.md). Tor gives SearXNG a
+# rotating outgoing IP for the engine requests.
+#
+# No secrets live in this file. setup.sh renders settings.yml (gitignored) with a
+# freshly generated secret_key.
+
+services:
+  tor:
+    image: osminogin/tor-simple:latest
+    container_name: wgc-tor
+    restart: unless-stopped
+    # Exposes a SOCKS5 proxy on 9050, reachable only inside this compose
+    # network as "tor:9050" — no host port is published.
+
+  searxng:
+    image: searxng/searxng:latest
+    container_name: wgc-searxng
+    restart: unless-stopped
+    depends_on:
+      - tor
+    ports:
+      - "127.0.0.1:8080:8080"   # localhost-only on the VPS; use an SSH tunnel
+    volumes:
+      - ./settings.yml:/etc/searxng/settings.yml:ro

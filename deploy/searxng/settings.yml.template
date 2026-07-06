@@ -1,0 +1,28 @@
+# Rendered to settings.yml by setup.sh, which injects a random secret_key.
+# The rendered settings.yml is gitignored so the secret never reaches the repo.
+use_default_settings: true
+
+general:
+  instance_name: "wgc-private"
+  donation_url: false
+
+server:
+  secret_key: "__SEARXNG_SECRET__"
+  limiter: false            # private instance: allow rapid automated queries
+  image_proxy: false
+
+search:
+  safe_search: 0
+  formats:
+    - html
+    - json                  # the crawler's searxng provider needs the JSON API
+
+outgoing:
+  request_timeout: 15.0     # Tor is slower than a direct connection
+  max_request_timeout: 30.0
+  pool_connections: 100
+  pool_maxsize: 20
+  # Route every engine request through the Tor sidecar (socks5h = remote DNS).
+  proxies:
+    all://:
+      - socks5h://tor:9050

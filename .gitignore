@@ -16,6 +16,10 @@ data/
 *.log
 storage_state.json
 
+# SearXNG VPS deploy — rendered config holds the real secret_key
+deploy/searxng/settings.yml
+deploy/**/.env
+
 # OS / editor cruft
 .DS_Store
 Thumbs.db
