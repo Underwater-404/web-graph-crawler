@@ -93,6 +93,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     discovery.add_argument("--searxng-url", help="Base URL of a SearXNG instance (searxng provider)")
     discovery.add_argument(
+        "--searxng-engines",
+        metavar="e1,e2",
+        help="Restrict SearXNG to these engines, e.g. 'mojeek' or 'mojeek,brave,duckduckgo' "
+        "(skips throttled google/bing)",
+    )
+    discovery.add_argument(
         "--browser-engine",
         choices=("bing", "duckduckgo"),
         default="bing",
@@ -310,6 +316,7 @@ def provider_settings_from_args(args: argparse.Namespace, proxy: str | None) -> 
         bing_endpoint=args.bing_endpoint,
         serper_key=args.serper_api_key,
         searxng_url=args.searxng_url,
+        searxng_engines=args.searxng_engines,
         browser_engine=args.browser_engine,
         cc_index=args.cc_index,
         cc_max_records=args.cc_max_records,

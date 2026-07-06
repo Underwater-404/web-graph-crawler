@@ -211,11 +211,12 @@ class SearxngProvider(SearchProvider):
 
     name = "searxng"
 
-    def __init__(self, client: HttpClient, base_url: str) -> None:
+    def __init__(self, client: HttpClient, base_url: str, engines: str | None = None) -> None:
         super().__init__(client)
         if not base_url:
             raise SearchError("SearXNG provider requires --searxng-url (e.g. https://searx.example)")
         self.base_url = base_url.rstrip("/")
+        self.engines = (engines or "").strip() or None
 
     def search(self, query: str, max_results: int) -> list[str]:
         collected: list[str] = []
@@ -223,6 +224,8 @@ class SearxngProvider(SearchProvider):
 
         for page in range(1, 11):
             params = {"q": query, "format": "json", "pageno": str(page), "safesearch": "0"}
+            if self.engines:
+                params["engines"] = self.engines  # e.g. "mojeek" or "mojeek,brave,duckduckgo"
             url = f"{self.base_url}/search?{urlencode(params)}"
             try:
                 payload = self.client.get_json(url)
@@ -487,6 +490,7 @@ class ProviderSettings:
     api_key: str | None = None
     endpoint: str | None = None
     searxng_url: str | None = None
+    searxng_engines: str | None = None
     google_cx: str | None = None
     browser_engine: str = "bing"
     cc_index: str | None = None
@@ -514,7 +518,7 @@ def create_search_provider(settings: ProviderSettings) -> SearchProvider:
     if name == "duckduckgo":
         return DuckDuckGoProvider(client)
     if name == "searxng":
-        return SearxngProvider(client, settings.searxng_url or "")
+        return SearxngProvider(client, settings.searxng_url or "", settings.searxng_engines)
     if name == "brave":
         return BraveProvider(client, settings.api_key or "")
     if name == "google":

@@ -199,6 +199,15 @@ export SEARXNG_URL=http://127.0.0.1:8080   # the tunnel's local end
 web-graph-crawler --search-provider searxng --dorks dorks.txt --out data/links.csv
 ```
 
+Pin SearXNG to specific engines with `--searxng-engines` — e.g. use **Mojeek**
+(its own independent index; it 403s direct scrapers but SearXNG's maintained
+engine handles it) or a throttle-resistant subset, skipping google/bing:
+
+```bash
+web-graph-crawler --search-provider searxng --searxng-engines mojeek --dorks dorks.txt
+web-graph-crawler --search-provider searxng --searxng-engines mojeek,brave,duckduckgo --dorks dorks.txt
+```
+
 **Free-tier note:** Serper's free plan returns 10 results per request (`num` > 10
 is paid), so the provider paginates in 10s. Each page = 1 credit, so
 `--results-per-dork` sets the credit cost per dork: `10` = 1 credit/dork,
