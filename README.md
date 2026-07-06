@@ -291,6 +291,37 @@ web-graph-crawler --dorks dorks.txt --no-ui --no-log-file   # plain, no file
 web-graph-crawler --headful https://example.org             # visible browser
 ```
 
+## Proxies (rotation)
+
+Rotate a pool of proxies across **both** discovery and the crawl to dodge
+per-IP throttling/bans. Put one proxy per line in a file (scheme-prefixed,
+auto-detected; bare `host:port` is assumed `http`):
+
+```text
+# proxies.txt
+socks5://127.0.0.1:9050         # Tor / no-auth SOCKS5
+socks5://10.0.0.9:1080
+http://user:pass@1.2.3.4:8080   # HTTP(S) may carry auth
+9.9.9.9:8000                    # bare = http://
+```
+
+```bash
+web-graph-crawler --search-provider commoncrawl --dorks dorks.txt \
+  --proxies proxies.txt --out data/links.csv
+```
+
+A proxy is chosen at random per request/page; one that errors is marked dead and
+skipped (the pool resets if all die). Notes:
+
+- **SOCKS needs PySocks** for the discovery client: `pip install -e '.[socks]'`
+  (or `pip install PySocks`). HTTP/HTTPS proxies need nothing extra.
+- **Auth:** HTTP/HTTPS proxies support `user:pass`. The crawl uses Chromium,
+  which does **not** support authentication on SOCKS proxies — use no-auth
+  SOCKS5 (e.g. Tor) or HTTP/HTTPS-with-auth for the crawl.
+- Not needed for `serper`/`brave`/`google` (real APIs don't ban); most useful for
+  the keyless scrapers (`duckduckgo`/`browser`/`commoncrawl`) and the crawl.
+- `--proxy` still sets a single proxy; `--proxies` (a pool) takes precedence.
+
 ## Project layout
 
 - `web_graph_crawler.py` / `collect_link_styles.py` — compatibility launchers.

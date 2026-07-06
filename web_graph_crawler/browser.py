@@ -12,6 +12,7 @@ from .config import CrawlerConfig
 from .constants import COOKIE_TEXT_RE
 from .links import LinkRecord, build_link_records
 from .progress import NULL_REPORTER, Reporter
+from .proxies import ProxyPool
 
 LOGGER = logging.getLogger("web_graph_crawler")
 
@@ -24,6 +25,7 @@ class RenderedLinkCrawler:
         self._playwright: Any = None
         self._browser: Any = None
         self._context: Any = None
+        self._proxy_pool = ProxyPool(list(config.proxies)) if config.proxies else None
 
     async def __aenter__(self) -> "RenderedLinkCrawler":
         try:
@@ -37,30 +39,39 @@ class RenderedLinkCrawler:
         browser_type = getattr(self._playwright, self.config.browser)
 
         launch_options: dict[str, Any] = {"headless": self.config.headless}
-        proxy_options = parse_proxy(self.config.proxy)
-        if proxy_options:
-            launch_options["proxy"] = proxy_options
+        if self._proxy_pool:
+            # Chromium requires a launch-time proxy to enable per-context proxy
+            # overrides; this sentinel turns on the per-page rotation below.
+            launch_options["proxy"] = {"server": "per-context"}
+        else:
+            proxy_options = parse_proxy(self.config.proxy)
+            if proxy_options:
+                launch_options["proxy"] = proxy_options
 
         self._browser = await browser_type.launch(**launch_options)
 
-        context_options: dict[str, Any] = {
-            "viewport": {
-                "width": self.config.viewport[0],
-                "height": self.config.viewport[1],
-            },
+        if not self._proxy_pool:
+            # One reused context with persisted cookies. When rotating proxies we
+            # build a fresh context per page instead (see crawl_once).
+            self._context = await self._browser.new_context(**self._context_options(use_storage=True))
+            self._context.set_default_timeout(self.config.timeout_ms)
+        return self
+
+    def _context_options(self, proxy: str | None = None, use_storage: bool = True) -> dict[str, Any]:
+        options: dict[str, Any] = {
+            "viewport": {"width": self.config.viewport[0], "height": self.config.viewport[1]},
             "locale": self.config.locale,
             "ignore_https_errors": self.config.ignore_https_errors,
         }
         if self.config.user_agent:
-            context_options["user_agent"] = self.config.user_agent
+            options["user_agent"] = self.config.user_agent
         if self.config.timezone_id:
-            context_options["timezone_id"] = self.config.timezone_id
-        if self.config.storage_state.exists():
-            context_options["storage_state"] = str(self.config.storage_state)
-
-        self._context = await self._browser.new_context(**context_options)
-        self._context.set_default_timeout(self.config.timeout_ms)
-        return self
+            options["timezone_id"] = self.config.timezone_id
+        if use_storage and self.config.storage_state.exists():
+            options["storage_state"] = str(self.config.storage_state)
+        if proxy:
+            options["proxy"] = parse_proxy(proxy)
+        return options
 
     async def __aexit__(self, exc_type: object, exc: object, tb: object) -> None:
         await self.save_storage_state()
@@ -103,47 +114,71 @@ class RenderedLinkCrawler:
         raise RuntimeError(f"Failed after {self.config.max_retries} attempts: {last_error}")
 
     async def crawl_once(self, source_url: str) -> list[LinkRecord]:
+        if self._proxy_pool:
+            return await self._crawl_rotating(source_url)
         if self._context is None:
             raise RuntimeError("Browser context is not open")
-
         page = await self._context.new_page()
         try:
-            LOGGER.info("Opening %s", source_url)
-            response = await page.goto(
-                source_url,
-                wait_until="domcontentloaded",
-                timeout=self.config.timeout_ms,
-            )
-
-            status = response.status if response else None
-            if status and status >= 500:
-                raise RuntimeError(f"server returned HTTP {status}")
-            if status and status >= 400:
-                LOGGER.warning("%s returned HTTP %s", source_url, status)
-
-            await self._wait_for_dynamic_content(page)
-            await self._dismiss_cookie_banner(page)
-            await self._scroll_for_lazy_content(page)
-            await self._wait_for_dynamic_content(page, after_scroll=True)
-
-            raw_links = await self._extract_raw_links(page)
-            records = build_link_records(
-                source_url=source_url,
-                final_source_url=page.url,
-                raw_links=raw_links,
-                include_non_http=self.config.include_non_http,
-                dedupe_links=self.config.dedupe_links,
-            )
-            LOGGER.info(
-                "Success: %s -> %d link rows from final URL %s",
-                source_url,
-                len(records),
-                page.url,
-            )
-            return records
+            return await self._scrape(page, source_url)
         finally:
             await self.save_storage_state()
             await page.close()
+
+    async def _crawl_rotating(self, source_url: str) -> list[LinkRecord]:
+        assert self._proxy_pool is not None
+        proxy = self._proxy_pool.pick()
+        context = await self._browser.new_context(
+            **self._context_options(proxy=proxy, use_storage=False)
+        )
+        context.set_default_timeout(self.config.timeout_ms)
+        page = await context.new_page()
+        try:
+            return await self._scrape(page, source_url)
+        except Exception as exc:
+            # Only retire the proxy on proxy-level failures, not slow targets.
+            message = str(exc)
+            if any(tag in message for tag in ("ERR_PROXY", "ERR_SOCKS", "ERR_TUNNEL")):
+                self._proxy_pool.mark_dead(proxy)
+                LOGGER.debug("proxy %s failed for %s; rotating", proxy, source_url)
+            raise
+        finally:
+            await context.close()
+
+    async def _scrape(self, page: Any, source_url: str) -> list[LinkRecord]:
+        LOGGER.info("Opening %s", source_url)
+        response = await page.goto(
+            source_url,
+            wait_until="domcontentloaded",
+            timeout=self.config.timeout_ms,
+        )
+
+        status = response.status if response else None
+        if status and status >= 500:
+            raise RuntimeError(f"server returned HTTP {status}")
+        if status and status >= 400:
+            LOGGER.warning("%s returned HTTP %s", source_url, status)
+
+        await self._wait_for_dynamic_content(page)
+        await self._dismiss_cookie_banner(page)
+        await self._scroll_for_lazy_content(page)
+        await self._wait_for_dynamic_content(page, after_scroll=True)
+
+        raw_links = await self._extract_raw_links(page)
+        records = build_link_records(
+            source_url=source_url,
+            final_source_url=page.url,
+            raw_links=raw_links,
+            include_non_http=self.config.include_non_http,
+            dedupe_links=self.config.dedupe_links,
+        )
+        LOGGER.info(
+            "Success: %s -> %d link rows from final URL %s",
+            source_url,
+            len(records),
+            page.url,
+        )
+        return records
 
     async def _wait_for_dynamic_content(self, page: Any, after_scroll: bool = False) -> None:
         try:

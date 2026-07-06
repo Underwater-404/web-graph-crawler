@@ -33,6 +33,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlencode, urlparse
 from urllib.request import OpenerDirector, ProxyHandler, Request, build_opener
 
+from .proxies import ProxyPool
+
 LOGGER = logging.getLogger("web_graph_crawler.search")
 
 DEFAULT_USER_AGENT = (
@@ -50,15 +52,34 @@ class SearchError(RuntimeError):
     """Raised when a provider is misconfigured (e.g. missing API key)."""
 
 
-@dataclass(frozen=True)
 class HttpClient:
-    """Small proxy-aware HTTP helper with retry/backoff."""
+    """Proxy-aware HTTP helper with retry/backoff and proxy rotation.
 
-    opener: OpenerDirector
-    user_agent: str = DEFAULT_USER_AGENT
-    timeout: float = 20.0
-    max_attempts: int = 3
-    backoff: float = 2.0
+    A :class:`~web_graph_crawler.proxies.ProxyPool` (if given) is consulted per
+    attempt; a proxy that yields a connection error is marked dead and the next
+    attempt rotates to another. Openers are cached per proxy.
+    """
+
+    def __init__(
+        self,
+        *,
+        user_agent: str = DEFAULT_USER_AGENT,
+        timeout: float = 20.0,
+        max_attempts: int = 3,
+        backoff: float = 2.0,
+        proxy_pool: "ProxyPool | None" = None,
+    ) -> None:
+        self.user_agent = user_agent
+        self.timeout = timeout
+        self.max_attempts = max_attempts
+        self.backoff = backoff
+        self.proxy_pool = proxy_pool
+        self._openers: dict[str | None, OpenerDirector] = {}
+
+    def _opener_for(self, proxy: str | None) -> OpenerDirector:
+        if proxy not in self._openers:
+            self._openers[proxy] = _build_opener(proxy)
+        return self._openers[proxy]
 
     def _request(self, method: str, url: str, *, headers: dict[str, str], data: bytes | None) -> bytes:
         merged = {"User-Agent": self.user_agent, "Accept-Language": "en-US,en;q=0.9"}
@@ -66,13 +87,15 @@ class HttpClient:
         last_error: Exception | None = None
 
         for attempt in range(1, self.max_attempts + 1):
+            proxy = self.proxy_pool.pick() if self.proxy_pool else None
+            opener = self._opener_for(proxy)  # may raise SearchError (SOCKS w/o PySocks)
             request = Request(url, data=data, headers=merged, method=method)
             try:
-                with self.opener.open(request, timeout=self.timeout) as response:
+                with opener.open(request, timeout=self.timeout) as response:
                     return response.read()
             except HTTPError as exc:
                 last_error = exc
-                # Auth/quota problems will not fix themselves on retry.
+                # A response means the proxy worked; auth/quota won't fix on retry.
                 if exc.code in {400, 401, 403}:
                     raise
                 retryable = exc.code == 429 or 500 <= exc.code < 600
@@ -81,6 +104,9 @@ class HttpClient:
                 LOGGER.warning("HTTP %s from %s; retry %d/%d", exc.code, _host(url), attempt, self.max_attempts)
             except (URLError, TimeoutError) as exc:
                 last_error = exc
+                if self.proxy_pool and proxy:
+                    self.proxy_pool.mark_dead(proxy)
+                    LOGGER.debug("proxy %s failed (%s); rotating", proxy, exc)
                 if attempt >= self.max_attempts:
                     raise
                 LOGGER.warning("Request to %s failed (%s); retry %d/%d", _host(url), exc, attempt, self.max_attempts)
@@ -466,13 +492,17 @@ class ProviderSettings:
     cc_index: str | None = None
     cc_max_records: int = 10000
     proxy: str | None = None
+    proxies: tuple[str, ...] = ()
     user_agent: str = DEFAULT_USER_AGENT
     timeout: float = 20.0
 
 
 def build_http_client(settings: ProviderSettings) -> HttpClient:
-    opener = _build_opener(settings.proxy)
-    return HttpClient(opener=opener, user_agent=settings.user_agent, timeout=settings.timeout)
+    proxies = list(settings.proxies) or ([settings.proxy] if settings.proxy else [])
+    pool = ProxyPool(proxies) if proxies else None
+    return HttpClient(
+        user_agent=settings.user_agent, timeout=settings.timeout, proxy_pool=pool
+    )
 
 
 def create_search_provider(settings: ProviderSettings) -> SearchProvider:
@@ -500,7 +530,7 @@ def create_search_provider(settings: ProviderSettings) -> SearchProvider:
         return BrowserSearchProvider(
             engine=settings.browser_engine,
             headless=True,
-            proxy=settings.proxy,
+            proxies=list(settings.proxies) or ([settings.proxy] if settings.proxy else []),
             user_agent=None,  # use a real desktop UA, not the stdlib client UA
             timeout=max(30.0, settings.timeout),
         )
@@ -564,11 +594,26 @@ def _host(url: str) -> str:
 def _build_opener(proxy: str | None) -> OpenerDirector:
     if not proxy:
         return build_opener()
-    scheme = urlparse(proxy if "://" in proxy else f"http://{proxy}").scheme.lower()
+    parsed = urlparse(proxy if "://" in proxy else f"http://{proxy}")
+    scheme = parsed.scheme.lower()
     if scheme.startswith("socks"):
-        LOGGER.warning(
-            "SOCKS proxies are not supported by the standard-library search client; "
-            "search discovery will run without a proxy (page visits can still use it)."
+        try:
+            import socks  # PySocks
+            from sockshandler import SocksiPyHandler
+        except ImportError as exc:
+            raise SearchError(
+                "SOCKS proxy support needs PySocks. Install it with: "
+                "pip install PySocks   (or: pip install -e '.[socks]')"
+            ) from exc
+        socks_type = socks.SOCKS4 if scheme.startswith("socks4") else socks.SOCKS5
+        return build_opener(
+            SocksiPyHandler(
+                socks_type,
+                parsed.hostname,
+                parsed.port or 1080,
+                rdns=True,  # resolve DNS through the proxy
+                username=parsed.username,
+                password=parsed.password,
+            )
         )
-        return build_opener()
     return build_opener(ProxyHandler({"http": proxy, "https": proxy}))

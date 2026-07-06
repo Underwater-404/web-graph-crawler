@@ -16,6 +16,7 @@ import base64
 import logging
 from urllib.parse import parse_qs, urlencode, urlparse
 
+from .proxies import ProxyPool
 from .search_providers import SearchError, SearchProvider, _host, _is_http_url
 
 LOGGER = logging.getLogger("web_graph_crawler.search")
@@ -66,7 +67,7 @@ class BrowserSearchProvider(SearchProvider):
         engine: str = "bing",
         *,
         headless: bool = True,
-        proxy: str | None = None,
+        proxies: list[str] | None = None,
         user_agent: str | None = None,
         timeout: float = 30.0,
     ) -> None:
@@ -78,7 +79,7 @@ class BrowserSearchProvider(SearchProvider):
         # Intentionally does not call super().__init__: this provider needs no HttpClient.
         self.engine = engine
         self.headless = headless
-        self.proxy = proxy
+        self.proxy_pool = ProxyPool(proxies) if proxies else None
         self.user_agent = user_agent or _UA
         self.timeout_ms = int(max(5.0, timeout) * 1000)
 
@@ -95,6 +96,7 @@ class BrowserSearchProvider(SearchProvider):
         proxy = self._proxy_option()
         if proxy:
             launch["proxy"] = proxy
+            LOGGER.debug("browser search via proxy %s", proxy.get("server"))
 
         with sync_playwright() as pw:
             browser = pw.chromium.launch(**launch)
@@ -110,11 +112,12 @@ class BrowserSearchProvider(SearchProvider):
                 browser.close()
 
     def _proxy_option(self) -> dict | None:
-        if not self.proxy:
+        proxy = self.proxy_pool.pick() if self.proxy_pool else None
+        if not proxy:
             return None
         from .browser import parse_proxy
 
-        return parse_proxy(self.proxy)
+        return parse_proxy(proxy)
 
     @staticmethod
     def _hrefs(page, selector: str) -> list[str]:

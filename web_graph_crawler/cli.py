@@ -18,6 +18,7 @@ from .links import LinkRecord, canonical_url, normalized_host
 from .output import CsvSink
 from .politeness import DomainRateLimiter, RobotsCache
 from .progress import NULL_REPORTER, Reporter
+from .proxies import load_proxies
 from .search_discovery import (
     DiscoveryConfig,
     build_provider_settings,
@@ -220,6 +221,13 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Optional HTTP/HTTPS/SOCKS proxy, e.g. http://user:pass@127.0.0.1:8080",
     )
     parser.add_argument(
+        "--proxies",
+        type=Path,
+        metavar="FILE",
+        help="File of proxies (one per line, scheme-prefixed) to rotate across "
+        "discovery and the crawl; SOCKS needs PySocks (pip install -e '.[socks]')",
+    )
+    parser.add_argument(
         "--user-agent",
         help="Optional fixed browser User-Agent for compatibility testing",
     )
@@ -299,6 +307,7 @@ def provider_settings_from_args(args: argparse.Namespace, proxy: str | None) -> 
         cc_index=args.cc_index,
         cc_max_records=args.cc_max_records,
         proxy=proxy,
+        proxies=getattr(args, "proxies_list", ()),
         user_agent=args.user_agent,
         timeout=args.search_timeout,
     )
@@ -376,6 +385,7 @@ def config_from_args(args: argparse.Namespace, urls: list[str]) -> CrawlerConfig
         crawl_scope=args.crawl_scope,
         max_pages=max(0, args.max_pages),
         max_pages_per_domain=max(0, args.max_pages_per_domain),
+        proxies=getattr(args, "proxies_list", ()),
     )
 
 
@@ -617,6 +627,11 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     try:
+        args.proxies_list = tuple(load_proxies(args.proxies)) if args.proxies else ()
+        if args.proxies_list:
+            LOGGER.info("Loaded %d proxy/ies for rotation", len(args.proxies_list))
+            reporter.info(f"rotating {len(args.proxies_list)} proxy/ies")
+
         no_targets = not args.urls and not args.urls_file and not collect_dorks(args)
         if no_targets and use_ui and console.interactive and not args.no_input:
             run_wizard(args, console)

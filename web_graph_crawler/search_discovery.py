@@ -127,6 +127,7 @@ def build_provider_settings(
     cc_index: str | None = None,
     cc_max_records: int = 10000,
     proxy: str | None = None,
+    proxies: tuple[str, ...] = (),
     user_agent: str | None = None,
     timeout: float = 20.0,
 ) -> ProviderSettings:
@@ -152,6 +153,7 @@ def build_provider_settings(
         cc_index=cc_index,
         cc_max_records=cc_max_records,
         proxy=proxy,
+        proxies=tuple(proxies),
         user_agent=user_agent or DEFAULT_USER_AGENT,
         timeout=timeout,
     )

@@ -41,6 +41,7 @@ class CrawlerConfig:
     crawl_scope: str
     max_pages: int
     max_pages_per_domain: int
+    proxies: tuple[str, ...] = ()
 
 
 def load_urls(positional_urls: list[str], urls_file: Path | None) -> list[str]:
