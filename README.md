@@ -282,6 +282,30 @@ web-graph-crawler --urls-file urls.txt --out data/links.csv
 Dorks, positional URLs, and `--urls-file` can be combined; the seed set is
 de-duplicated across all sources.
 
+## Just the URLs (discover-only / SQLi candidates)
+
+By default the tool crawls each discovered page and writes a *link graph* (every
+link on every page). If you only want the **dork hits themselves** — one URL per
+line, no crawl — use `--discover-only`:
+
+```bash
+web-graph-crawler --search-provider serper --dorks dorks.txt --results-per-dork 10 \
+  --discover-only --out candidates.txt
+```
+
+Add `--params-only` to keep just **injectable URLs** — those with a query
+parameter — deduplicated to one per unique `host/path?params` endpoint (so
+`p.php?id=1` and `p.php?id=2` collapse to one). That's a clean SQLi-candidate
+list ready for `sqlmap -m candidates.txt`:
+
+```bash
+web-graph-crawler --search-provider serper --dorks dorks.txt --results-per-dork 10 \
+  --discover-only --params-only --out candidates.txt
+```
+
+`--params-only` also works without `--discover-only` (it just filters the seed set
+before crawling).
+
 ## Following links (multi-hop graph)
 
 By default the crawler is depth-0: it mines links from the seed/discovered pages

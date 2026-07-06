@@ -13,7 +13,7 @@ from urllib.parse import urlparse
 from .browser import RenderedLinkCrawler
 from .config import CrawlerConfig, load_urls, parse_viewport
 from .constants import DEFAULT_LOG_FILE, DEFAULT_OUTPUT, DEFAULT_STORAGE_STATE
-from .filters import parse_domain_list
+from .filters import parameterized_candidates, parse_domain_list
 from .links import LinkRecord, canonical_url, normalized_host
 from .output import CsvSink
 from .politeness import DomainRateLimiter, RobotsCache
@@ -131,6 +131,17 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--discovered-urls-out",
         type=Path,
         help="Write the selected discovered URLs to this file for review/reuse",
+    )
+    discovery.add_argument(
+        "--discover-only",
+        action="store_true",
+        help="Only discover URLs (one per line to --out); skip the browser crawl entirely",
+    )
+    discovery.add_argument(
+        "--params-only",
+        action="store_true",
+        help="Keep only URLs with a query parameter, deduped to unique injectable "
+        "endpoints (host/path?params) — a clean SQLi-candidate list",
     )
 
     graph = parser.add_argument_group("graph crawl")
@@ -658,8 +669,25 @@ def main(argv: list[str] | None = None) -> int:
             run_wizard(args, console)
 
         urls = gather_seed_urls(args, reporter)
+
+        if args.params_only:
+            before = len(urls)
+            urls = parameterized_candidates(urls)
+            LOGGER.info("Kept %d parameterized candidate(s) of %d", len(urls), before)
+            reporter.info(f"{len(urls)} unique parameterized endpoint(s) of {before}")
+
         if not urls:
-            raise ValueError("No URLs to crawl after discovery; refine your dorks or provide URLs")
+            raise ValueError("No URLs after discovery; refine your dorks or drop --params-only")
+
+        if args.discover_only:
+            dest = args.discovered_urls_out or args.out
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_text("\n".join(urls) + "\n", encoding="utf-8")
+            LOGGER.info("discover-only: wrote %d URL(s) to %s", len(urls), dest)
+            reporter.info(f"wrote {len(urls)} URL(s) to {dest} (no crawl)")
+            reporter.crawl_done({"fetched": 0, "success": 0, "failure": 0, "skipped": 0,
+                                 "rows": len(urls), "output": dest})
+            return 0
 
         config = config_from_args(args, urls)
         if config.max_depth > 0 and not config.max_pages:

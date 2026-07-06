@@ -8,7 +8,7 @@ discovery drops any result whose host matches one (unless disabled).
 
 from __future__ import annotations
 
-from urllib.parse import urlparse
+from urllib.parse import parse_qsl, urlparse
 
 #: Mainstream platforms that clutter broad dork results. Registrable domains;
 #: matching is suffix-aware so subdomains (m.facebook.com) are caught too.
@@ -73,6 +73,30 @@ def dedup_key(url: str) -> str:
         host = host[4:]
     path = parsed.path.rstrip("/") or "/"
     return f"{host}{path}?{parsed.query}" if parsed.query else f"{host}{path}"
+
+
+def parameterized_candidates(urls: list[str]) -> list[str]:
+    """Keep only URLs with a query parameter, one per unique injectable endpoint.
+
+    For SQLi-style recon you want URLs like ``a.de/p.php?id=1`` (a testable
+    parameter), not ``?id=1`` and ``?id=2`` of the same page separately. This
+    drops query-less URLs and de-duplicates by (host, path, sorted param names),
+    so each distinct ``host/path?params`` endpoint appears once.
+    """
+    out: list[str] = []
+    seen: set[str] = set()
+    for url in urls:
+        parsed = urlparse(url)
+        params = parse_qsl(parsed.query, keep_blank_values=True)
+        if not params:
+            continue
+        names = ",".join(sorted(name for name, _ in params))
+        signature = f"{(parsed.hostname or '').lower()}{parsed.path}?{names}"
+        if signature in seen:
+            continue
+        seen.add(signature)
+        out.append(url)
+    return out
 
 
 def parse_domain_list(value: str | None) -> frozenset[str]:
