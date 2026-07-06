@@ -21,7 +21,7 @@ from .search_providers import SearchError, SearchProvider, _host, _is_http_url
 
 LOGGER = logging.getLogger("web_graph_crawler.search")
 
-BROWSER_ENGINES = ("bing", "duckduckgo")
+BROWSER_ENGINES = ("bing", "duckduckgo", "mojeek")
 
 _UA = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
@@ -31,7 +31,7 @@ _UA = (
 # Result links pointing back at the engines/aggregators are never useful seeds.
 _EXCLUDE_HOSTS = (
     "bing.com", "microsoft.com", "microsofttranslator.com", "msn.com", "go.microsoft.com",
-    "duckduckgo.com", "google.com", "youtube.com",
+    "duckduckgo.com", "google.com", "youtube.com", "mojeek.com",
 )
 
 
@@ -106,6 +106,8 @@ class BrowserSearchProvider(SearchProvider):
             try:
                 if self.engine == "bing":
                     return self._bing(page, query, max_results)
+                if self.engine == "mojeek":
+                    return self._mojeek(page, query, max_results)
                 return self._duckduckgo(page, query, max_results)
             finally:
                 context.close()
@@ -180,6 +182,45 @@ class BrowserSearchProvider(SearchProvider):
             LOGGER.debug("Bing page first=%d: %d raw link(s)", first, len(hrefs))
             done = self._add(hrefs, seen, collected, max_results, unwrap=True)
             if done or not hrefs:
+                break
+        return collected
+
+    def _mojeek(self, page, query: str, max_results: int) -> list[str]:
+        collected: list[str] = []
+        seen: set[str] = set()
+        for start in range(1, max(1, max_results) * 2, 10):
+            params: dict = {"q": query}
+            if start > 1:
+                params["s"] = start  # Mojeek paginates via a 1-based start offset
+            url = "https://www.mojeek.com/search?" + urlencode(params)
+            try:
+                page.goto(url, wait_until="domcontentloaded")
+            except Exception as exc:  # noqa: BLE001
+                LOGGER.warning("Mojeek browser search failed for %r: %s", query, exc)
+                break
+            self._dismiss_consent(page)
+            try:
+                title = (page.title() or "").lower()
+            except Exception:  # noqa: BLE001
+                title = ""
+            if "403" in title or "forbidden" in title:
+                LOGGER.warning(
+                    "Mojeek blocked the request (rate-limited automated queries). "
+                    "Slow down, or use SearXNG's mojeek engine instead."
+                )
+                break
+            try:
+                page.wait_for_selector("ul.results-standard a[href], a.ob[href]", timeout=8000)
+            except Exception:  # noqa: BLE001
+                pass
+            # Prefer the results container; fall back to any anchor (excludes filter noise).
+            hrefs = self._hrefs(page, "ul.results-standard a[href], a.ob[href]")
+            if not hrefs:
+                hrefs = self._hrefs(page, "main a[href], a[href]")
+            LOGGER.debug("Mojeek page start=%d: %d raw link(s)", start, len(hrefs))
+            if self._add(hrefs, seen, collected, max_results):
+                break
+            if not hrefs:
                 break
         return collected
 

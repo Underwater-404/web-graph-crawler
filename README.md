@@ -137,7 +137,16 @@ web-graph-crawler --search-provider browser --dorks mydorks.txt --out data/links
 
 # Or drive DuckDuckGo's normal site in the browser instead of Bing
 web-graph-crawler --search-provider browser --browser-engine duckduckgo --dork "inurl:blog"
+
+# Mojeek direct (its own independent index; 403s plain scrapers but a real
+# browser gets through). No SearXNG needed:
+web-graph-crawler --search-provider browser --browser-engine mojeek --dork "site:example.com"
 ```
+
+`--browser-engine mojeek` hits Mojeek directly through Chromium. Caveats: Mojeek
+rate-limits automated queries by IP (slow down if it starts 403ing), its index is
+much smaller than Google's, and it doesn't honor `inurl:`/`filetype:`/`intitle:` —
+so it's for broad discovery, not Google-hacking operator dorks.
 
 It runs the search headless regardless of `--headful`. Discovery happens before
 the crawl, so this adds ~1–2 s per dork to launch the browser.

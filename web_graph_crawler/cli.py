@@ -100,7 +100,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     discovery.add_argument(
         "--browser-engine",
-        choices=("bing", "duckduckgo"),
+        choices=("bing", "duckduckgo", "mojeek"),
         default="bing",
         help="Which engine the keyless 'browser' provider drives (default: bing)",
     )
