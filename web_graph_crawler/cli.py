@@ -225,7 +225,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
         type=Path,
         metavar="FILE",
         help="File of proxies (one per line, scheme-prefixed) to rotate across "
-        "discovery and the crawl; SOCKS needs PySocks (pip install -e '.[socks]')",
+        "BOTH discovery and the crawl; SOCKS needs PySocks (pip install -e '.[socks]')",
+    )
+    parser.add_argument(
+        "--crawl-proxies",
+        type=Path,
+        metavar="FILE",
+        help="Proxies to rotate for the CRAWL only (discovery stays direct). Use with "
+        "an API provider like serper to keep discovery keyed but hide the crawl IP",
     )
     parser.add_argument(
         "--user-agent",
@@ -385,7 +392,8 @@ def config_from_args(args: argparse.Namespace, urls: list[str]) -> CrawlerConfig
         crawl_scope=args.crawl_scope,
         max_pages=max(0, args.max_pages),
         max_pages_per_domain=max(0, args.max_pages_per_domain),
-        proxies=getattr(args, "proxies_list", ()),
+        # --crawl-proxies (crawl only) overrides --proxies for the crawl.
+        proxies=getattr(args, "crawl_proxies_list", ()) or getattr(args, "proxies_list", ()),
     )
 
 
@@ -628,9 +636,15 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         args.proxies_list = tuple(load_proxies(args.proxies)) if args.proxies else ()
+        args.crawl_proxies_list = (
+            tuple(load_proxies(args.crawl_proxies)) if args.crawl_proxies else ()
+        )
         if args.proxies_list:
-            LOGGER.info("Loaded %d proxy/ies for rotation", len(args.proxies_list))
-            reporter.info(f"rotating {len(args.proxies_list)} proxy/ies")
+            LOGGER.info("Rotating %d proxy/ies (discovery + crawl)", len(args.proxies_list))
+            reporter.info(f"rotating {len(args.proxies_list)} proxy/ies (discovery + crawl)")
+        if args.crawl_proxies_list:
+            LOGGER.info("Rotating %d proxy/ies (crawl only)", len(args.crawl_proxies_list))
+            reporter.info(f"rotating {len(args.crawl_proxies_list)} proxy/ies (crawl only)")
 
         no_targets = not args.urls and not args.urls_file and not collect_dorks(args)
         if no_targets and use_ui and console.interactive and not args.no_input:

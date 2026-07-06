@@ -318,9 +318,26 @@ skipped (the pool resets if all die). Notes:
 - **Auth:** HTTP/HTTPS proxies support `user:pass`. The crawl uses Chromium,
   which does **not** support authentication on SOCKS proxies — use no-auth
   SOCKS5 (e.g. Tor) or HTTP/HTTPS-with-auth for the crawl.
-- Not needed for `serper`/`brave`/`google` (real APIs don't ban); most useful for
-  the keyless scrapers (`duckduckgo`/`browser`/`commoncrawl`) and the crawl.
-- `--proxy` still sets a single proxy; `--proxies` (a pool) takes precedence.
+- Not needed for `serper`/`brave`/`google` (real APIs are keyed, not IP-banned);
+  most useful for the keyless scrapers (`duckduckgo`/`browser`/`commoncrawl`) and
+  the crawl.
+- `--proxy` sets a single proxy; `--proxies` (a pool) takes precedence.
+
+### Serper discovery + proxied crawl
+
+The ban risk with an API provider isn't discovery (keyed, no IP ban) — it's the
+**crawl**, which hits target sites from your IP. Use `--crawl-proxies` to keep
+discovery direct and rotate proxies for the crawl only:
+
+```bash
+export SERPER_API_KEY="your-key"
+web-graph-crawler --search-provider serper --dorks dorks.txt \
+  --crawl-proxies proxies.txt --out data/links.csv
+```
+
+- `--proxies FILE` → both discovery and crawl.
+- `--crawl-proxies FILE` → crawl only (discovery stays direct); overrides
+  `--proxies` for the crawl. Ideal with `serper`/`brave`/`google`.
 
 ## Project layout
 
